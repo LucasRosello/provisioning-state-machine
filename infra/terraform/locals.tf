@@ -30,13 +30,13 @@ locals {
   }
 
   lambda_env = {
-    REQUESTS_TABLE     = aws_dynamodb_table.requests.name
-    RESOURCES_TABLE    = aws_dynamodb_table.resource_instances.name
-    AUDIT_TABLE        = aws_dynamodb_table.audit_events.name
-    ARTIFACTS_BUCKET   = aws_s3_bucket.artifacts.bucket
-    TF_STATE_BUCKET    = aws_s3_bucket.tf_state.bucket
+    REQUESTS_TABLE      = aws_dynamodb_table.requests.name
+    RESOURCES_TABLE     = aws_dynamodb_table.resource_instances.name
+    AUDIT_TABLE         = aws_dynamodb_table.audit_events.name
+    ARTIFACTS_BUCKET    = aws_s3_bucket.artifacts.bucket
+    TF_STATE_BUCKET     = aws_s3_bucket.tf_state.bucket
     NOTIFICATIONS_TOPIC = aws_sns_topic.notifications.arn
-    TEMPLATES_REPO_URL = var.templates_repo_url
-    AUTO_APPROVE       = tostring(var.auto_approve_demo)
+    TEMPLATES_REPO_URL  = var.templates_repo_url
+    AUTO_APPROVE        = tostring(var.auto_approve_demo)
   }
 }
