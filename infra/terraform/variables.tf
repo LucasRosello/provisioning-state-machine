@@ -37,7 +37,7 @@ variable "api_repo_url" {
 variable "api_repo_ref" {
   description = "Git ref for the API code deployed on the app host."
   type        = string
-  default     = "main"
+  default     = "b57a0abdd492985728ef2ee01e2f605f284bebde"
 }
 
 variable "portal_repo_url" {
@@ -49,7 +49,7 @@ variable "portal_repo_url" {
 variable "portal_repo_ref" {
   description = "Git ref for the portal code deployed on the app host."
   type        = string
-  default     = "main"
+  default     = "c32476f1004ce089a30cdb3d711914989b3faa2f"
 }
 
 variable "app_instance_type" {

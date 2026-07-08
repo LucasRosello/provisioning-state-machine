@@ -71,3 +71,26 @@ NGINX
 systemctl daemon-reload
 systemctl enable --now platform-self-service-api
 systemctl enable --now nginx
+
+for attempt in $(seq 1 30); do
+    if curl -fsS http://127.0.0.1/api/health; then
+        break
+    fi
+
+    if [ "$attempt" -eq 30 ]; then
+        systemctl status platform-self-service-api --no-pager || true
+        journalctl -u platform-self-service-api -n 100 --no-pager || true
+        systemctl status nginx --no-pager || true
+        journalctl -u nginx -n 100 --no-pager || true
+        exit 1
+    fi
+
+    sleep 2
+done
+
+echo "DASHBOARD_SELF_CHECK_START"
+curl -fsS http://127.0.0.1/api/v1/dashboard/summary | python3.11 -c 'import json, sys; d=json.load(sys.stdin); print(json.dumps({"health": d["health"]["status"], "total_requests": d["health"]["total_requests"], "failed_requests": d["health"]["failed_requests"], "pending_approvals": d["health"]["pending_approvals"], "resource_usage": d["resource_usage"]}, sort_keys=True))'
+echo "DASHBOARD_SELF_CHECK_END"
+echo "PORTAL_SELF_CHECK_START"
+curl -fsSI http://127.0.0.1/ | head -n 1
+echo "PORTAL_SELF_CHECK_END"
