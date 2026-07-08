@@ -26,7 +26,6 @@ phases:
       - git checkout "${TEMPLATE_COMMIT_SHA}"
       - cd "${MODULE_PATH}"
       - printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf
-      - aws dynamodb update-item --region "${AWS_REGION_NAME}" --table-name "${REQUESTS_TABLE}" --key "{\"request_id\":{\"S\":\"${REQUEST_ID}\"}}" --update-expression "SET #s = :s" --expression-attribute-names '{"#s":"status"}' --expression-attribute-values "{\":s\":{\"S\":\"PLANNING\"}}" || true
 
   build:
     commands:
