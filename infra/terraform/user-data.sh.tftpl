@@ -10,8 +10,10 @@ rm -rf /opt/platform-self-service
 mkdir -p /opt/platform-self-service
 cd /opt/platform-self-service
 
-git clone --depth 1 --branch "${api_repo_ref}" "${api_repo_url}" api
-git clone --depth 1 --branch "${portal_repo_ref}" "${portal_repo_url}" portal
+git clone --depth 1 "${api_repo_url}" api
+git -C api checkout "${api_repo_ref}"
+git clone --depth 1 "${portal_repo_url}" portal
+git -C portal checkout "${portal_repo_ref}"
 
 python3 -m venv /opt/platform-self-service/api/.venv
 /opt/platform-self-service/api/.venv/bin/pip install --upgrade pip
