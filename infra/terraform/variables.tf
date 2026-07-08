@@ -25,7 +25,7 @@ variable "templates_repo_url" {
 variable "templates_commit_sha" {
   description = "Immutable commit SHA in the templates repository used by the demo registry."
   type        = string
-  default     = "117861e8861a2f41273e194bd5e3d2dab477dabc"
+  default     = "08b80d42d4f60b96ab456325f80fd1841c243afc"
 }
 
 variable "api_repo_url" {
