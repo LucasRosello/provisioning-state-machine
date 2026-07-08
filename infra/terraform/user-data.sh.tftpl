@@ -1,0 +1,71 @@
+#!/bin/bash
+set -euxo pipefail
+
+dnf update -y
+dnf install -y git nginx python3 python3-pip
+curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+dnf install -y nodejs
+
+rm -rf /opt/platform-self-service
+mkdir -p /opt/platform-self-service
+cd /opt/platform-self-service
+
+git clone --depth 1 --branch "${api_repo_ref}" "${api_repo_url}" api
+git clone --depth 1 --branch "${portal_repo_ref}" "${portal_repo_url}" portal
+
+python3 -m venv /opt/platform-self-service/api/.venv
+/opt/platform-self-service/api/.venv/bin/pip install --upgrade pip
+/opt/platform-self-service/api/.venv/bin/pip install -r /opt/platform-self-service/api/requirements.txt
+
+cat >/etc/systemd/system/platform-self-service-api.service <<'SERVICE'
+[Unit]
+Description=Platform Self-Service API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/platform-self-service/api
+Environment=AWS_REGION=${aws_region}
+Environment=STEP_FUNCTIONS_STATE_MACHINE_ARN=${state_machine_arn}
+Environment=REQUESTS_TABLE=${requests_table}
+Environment=AUDIT_TABLE=${audit_table}
+ExecStart=/opt/platform-self-service/api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+cd /opt/platform-self-service/portal
+npm ci
+VITE_API_BASE_URL=/api npm run build
+rm -rf /usr/share/nginx/html/*
+cp -r /opt/platform-self-service/portal/dist/* /usr/share/nginx/html/
+
+cat >/etc/nginx/conf.d/platform-self-service.conf <<'NGINX'
+server {
+    listen 80 default_server;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+NGINX
+
+systemctl daemon-reload
+systemctl enable --now platform-self-service-api
+systemctl enable --now nginx

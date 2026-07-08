@@ -15,11 +15,30 @@ _s3 = boto3.client("s3")
 ARTIFACTS_BUCKET = os.environ["ARTIFACTS_BUCKET"]
 
 
+def _dynamodb_config(config):
+    normalized = dict(config)
+    partition_key = normalized.get("partition_key")
+    sort_key = normalized.get("sort_key")
+
+    if isinstance(partition_key, str):
+        normalized["partition_key"] = {"name": partition_key, "type": "S"}
+
+    if isinstance(sort_key, str):
+        if sort_key:
+            normalized["sort_key"] = {"name": sort_key, "type": "S"}
+        else:
+            normalized.pop("sort_key", None)
+
+    return normalized
+
+
 def handler(event, _context):
     request_id = event["request_id"]
     request = event["request"]
     template = event["template"]
     config = request.get("config", {}) or {}
+    if template["id"] == "dynamodb-table":
+        config = _dynamodb_config(config)
 
     env = request["environment"]
     team = request["team"]

@@ -38,3 +38,17 @@ output "terraform_plan_project" {
 output "terraform_apply_project" {
   value = aws_codebuild_project.terraform_apply.name
 }
+
+output "portal_url" {
+  description = "Public URL for the AWS-hosted demo portal."
+  value       = "http://${aws_instance.app.public_dns}"
+}
+
+output "api_health_url" {
+  description = "Public health endpoint for the AWS-hosted API through Nginx."
+  value       = "http://${aws_instance.app.public_dns}/api/health"
+}
+
+output "app_public_ip" {
+  value = aws_instance.app.public_ip
+}

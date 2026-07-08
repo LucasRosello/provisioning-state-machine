@@ -3,28 +3,32 @@
 Guarantees terraform runs against a pinned version of the template. Demo uses a
 static registry; production resolves the tag to a commit via the git provider.
 """
+import os
+
 import platform_common as pc
+
+TEMPLATES_COMMIT_SHA = os.environ["TEMPLATES_COMMIT_SHA"]
 
 # template_id -> version -> {git_ref, commit_sha, module_path}
 REGISTRY = {
     "dynamodb-table": {
         "1.0.0": {
             "git_ref": "dynamodb-table/v1.0.0",
-            "commit_sha": "abc123def4567890abc123def4567890abc123de",
+            "commit_sha": TEMPLATES_COMMIT_SHA,
             "module_path": "templates/dynamodb-table",
         }
     },
     "rds-postgres": {
         "1.0.0": {
             "git_ref": "rds-postgres/v1.0.0",
-            "commit_sha": "def456abc7890123def456abc7890123def456ab",
+            "commit_sha": TEMPLATES_COMMIT_SHA,
             "module_path": "templates/rds-postgres",
         }
     },
     "cache-valkey": {
         "1.0.0": {
             "git_ref": "cache-valkey/v1.0.0",
-            "commit_sha": "0123abc456def7890123abc456def7890123abc4",
+            "commit_sha": TEMPLATES_COMMIT_SHA,
             "module_path": "templates/cache-valkey",
         }
     },

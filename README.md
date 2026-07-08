@@ -60,6 +60,21 @@ terraform init
 terraform apply
 ```
 
+The same Terraform stack also deploys a small AWS-hosted demo app:
+
+- an EC2 host for the API and portal,
+- an instance role that lets the API write requests/audit rows and start the
+  provisioning state machine,
+- Nginx serving the portal and proxying `/api` to FastAPI.
+
+Useful outputs after apply:
+
+```bash
+terraform output -raw portal_url
+terraform output -raw api_health_url
+terraform output -raw state_machine_arn
+```
+
 Then create a demo request and start an execution:
 
 ```bash

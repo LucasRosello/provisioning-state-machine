@@ -181,7 +181,10 @@ data "aws_iam_policy_document" "codebuild" {
       "logs:CreateLogStream",
       "logs:PutLogEvents",
     ]
-    resources = ["arn:aws:logs:*:*:log-group:/aws/codebuild/${var.name_prefix}-*"]
+    resources = [
+      "arn:aws:logs:*:*:log-group:/aws/codebuild/${var.name_prefix}-*",
+      "arn:aws:logs:*:*:log-group:/aws/codebuild/${var.name_prefix}-*:*",
+    ]
   }
 
   statement {

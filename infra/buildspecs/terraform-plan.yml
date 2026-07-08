@@ -18,11 +18,14 @@ phases:
 
   pre_build:
     commands:
+      - export AWS_REGION="${AWS_REGION_NAME}"
+      - export AWS_DEFAULT_REGION="${AWS_REGION_NAME}"
       - echo "Checking out templates at immutable commit ${TEMPLATE_COMMIT_SHA}"
       - git clone "${TEMPLATES_REPO_URL}" repo
       - cd repo
       - git checkout "${TEMPLATE_COMMIT_SHA}"
       - cd "${MODULE_PATH}"
+      - printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf
       - aws dynamodb update-item --region "${AWS_REGION_NAME}" --table-name "${REQUESTS_TABLE}"
           --key "{\"request_id\":{\"S\":\"${REQUEST_ID}\"}}"
           --update-expression "SET #s = :s" --expression-attribute-names '{"#s":"status"}'
