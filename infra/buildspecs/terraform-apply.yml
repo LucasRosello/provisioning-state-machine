@@ -26,21 +26,14 @@ phases:
       - git checkout "${TEMPLATE_COMMIT_SHA}"
       - cd "${MODULE_PATH}"
       - printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf
-      - aws dynamodb update-item --region "${AWS_REGION_NAME}" --table-name "${REQUESTS_TABLE}"
-          --key "{\"request_id\":{\"S\":\"${REQUEST_ID}\"}}"
-          --update-expression "SET #s = :s" --expression-attribute-names '{"#s":"status"}'
-          --expression-attribute-values "{\":s\":{\"S\":\"APPLYING\"}}" || true
+      - aws dynamodb update-item --region "${AWS_REGION_NAME}" --table-name "${REQUESTS_TABLE}" --key "{\"request_id\":{\"S\":\"${REQUEST_ID}\"}}" --update-expression "SET #s = :s" --expression-attribute-names '{"#s":"status"}' --expression-attribute-values "{\":s\":{\"S\":\"APPLYING\"}}" || true
 
   build:
     commands:
       - echo "Restoring approved plan and tfvars for ${REQUEST_ID}"
       - aws s3 cp "s3://${ARTIFACTS_BUCKET}/${REQUEST_ID}/terraform.tfvars.json" ./terraform.tfvars.json
       - aws s3 cp "s3://${ARTIFACTS_BUCKET}/${REQUEST_ID}/tfplan" ./tfplan
-      - terraform init -input=false
-          -backend-config="bucket=${TF_STATE_BUCKET}"
-          -backend-config="key=${STATE_KEY}"
-          -backend-config="dynamodb_table=${TF_LOCK_TABLE}"
-          -backend-config="region=${AWS_REGION_NAME}"
+      - terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="key=${STATE_KEY}" -backend-config="dynamodb_table=${TF_LOCK_TABLE}" -backend-config="region=${AWS_REGION_NAME}"
       - terraform apply -input=false -auto-approve tfplan
 
   post_build:
