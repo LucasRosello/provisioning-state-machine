@@ -1,0 +1,47 @@
+version: 0.2
+
+# Runs terraform apply against the APPROVED plan for a single request, using the
+# same immutable commit and the same state key as the plan. Invoked by Step
+# Functions via codebuild:startBuild.sync.
+#
+# Env: REQUEST_ID, TEMPLATE_COMMIT_SHA, MODULE_PATH, STATE_KEY
+#      TEMPLATES_REPO_URL, ARTIFACTS_BUCKET, TF_STATE_BUCKET, TF_LOCK_TABLE, AWS_REGION_NAME
+
+phases:
+  install:
+    commands:
+      - yum install -y unzip git jq >/dev/null
+      - TF_VERSION=1.9.5
+      - curl -sS -o /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
+      - unzip -o /tmp/tf.zip -d /usr/local/bin >/dev/null
+      - terraform version
+
+  pre_build:
+    commands:
+      - echo "Checking out templates at immutable commit ${TEMPLATE_COMMIT_SHA}"
+      - git clone "${TEMPLATES_REPO_URL}" repo
+      - cd repo
+      - git checkout "${TEMPLATE_COMMIT_SHA}"
+      - cd "${MODULE_PATH}"
+      - aws dynamodb update-item --region "${AWS_REGION_NAME}" --table-name "${REQUESTS_TABLE}"
+          --key "{\"request_id\":{\"S\":\"${REQUEST_ID}\"}}"
+          --update-expression "SET #s = :s" --expression-attribute-names '{"#s":"status"}'
+          --expression-attribute-values "{\":s\":{\"S\":\"APPLYING\"}}" || true
+
+  build:
+    commands:
+      - echo "Restoring approved plan and tfvars for ${REQUEST_ID}"
+      - aws s3 cp "s3://${ARTIFACTS_BUCKET}/${REQUEST_ID}/terraform.tfvars.json" ./terraform.tfvars.json
+      - aws s3 cp "s3://${ARTIFACTS_BUCKET}/${REQUEST_ID}/tfplan" ./tfplan
+      - terraform init -input=false
+          -backend-config="bucket=${TF_STATE_BUCKET}"
+          -backend-config="key=${STATE_KEY}"
+          -backend-config="dynamodb_table=${TF_LOCK_TABLE}"
+          -backend-config="region=${AWS_REGION_NAME}"
+      - terraform apply -input=false -auto-approve tfplan
+
+  post_build:
+    commands:
+      - echo "Exporting terraform outputs for ${REQUEST_ID}"
+      - terraform output -json > outputs.json
+      - aws s3 cp outputs.json "s3://${ARTIFACTS_BUCKET}/${REQUEST_ID}/outputs.json"

@@ -1,0 +1,642 @@
+{
+  "Comment": "Platform Self-Service Provisioning Workflow. Input: { \"request_id\": \"req-123\" }. The full request is loaded from the database; only the request_id travels in the start input.",
+  "StartAt": "LoadRequest",
+  "TimeoutSeconds": 172800,
+  "States": {
+    "LoadRequest": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${load_request_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id"
+        }
+      },
+      "ResultSelector": {
+        "request.$": "$.Payload.request"
+      },
+      "ResultPath": "$.loaded",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "ValidateSchema"
+    },
+
+    "ValidateSchema": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${validate_schema_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request"
+        }
+      },
+      "ResultSelector": {
+        "valid.$": "$.Payload.schema_valid",
+        "errors.$": "$.Payload.errors"
+      },
+      "ResultPath": "$.schema",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "IsSchemaValid"
+    },
+
+    "IsSchemaValid": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.schema.valid",
+          "BooleanEquals": true,
+          "Next": "ValidateOwnership"
+        }
+      ],
+      "Default": "RejectRequest"
+    },
+
+    "ValidateOwnership": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${validate_ownership_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request"
+        }
+      },
+      "ResultSelector": {
+        "valid.$": "$.Payload.ownership_valid",
+        "errors.$": "$.Payload.errors"
+      },
+      "ResultPath": "$.ownership",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "IsOwnershipValid"
+    },
+
+    "IsOwnershipValid": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ownership.valid",
+          "BooleanEquals": true,
+          "Next": "ValidatePolicies"
+        }
+      ],
+      "Default": "RejectRequest"
+    },
+
+    "ValidatePolicies": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${validate_policies_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request"
+        }
+      },
+      "ResultSelector": {
+        "valid.$": "$.Payload.policies_valid",
+        "violations.$": "$.Payload.violations"
+      },
+      "ResultPath": "$.policies",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "ArePoliciesValid"
+    },
+
+    "ArePoliciesValid": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.policies.valid",
+          "BooleanEquals": true,
+          "Next": "ResolveTemplate"
+        }
+      ],
+      "Default": "RejectRequest"
+    },
+
+    "ResolveTemplate": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${resolve_template_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request"
+        }
+      },
+      "ResultSelector": {
+        "id.$": "$.Payload.template.id",
+        "version.$": "$.Payload.template.version",
+        "git_ref.$": "$.Payload.template.git_ref",
+        "commit_sha.$": "$.Payload.template.commit_sha",
+        "module_path.$": "$.Payload.template.module_path"
+      },
+      "ResultPath": "$.template",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "GenerateTerraformVariables"
+    },
+
+    "GenerateTerraformVariables": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${generate_tfvars_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request",
+          "template.$": "$.template"
+        }
+      },
+      "ResultSelector": {
+        "module_path.$": "$.Payload.terraform.module_path",
+        "state_key.$": "$.Payload.terraform.state_key",
+        "variables.$": "$.Payload.terraform.variables"
+      },
+      "ResultPath": "$.terraform",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "TerraformPlan"
+    },
+
+    "TerraformPlan": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::codebuild:startBuild.sync",
+      "Parameters": {
+        "ProjectName": "${terraform_plan_project}",
+        "EnvironmentVariablesOverride": [
+          { "Name": "REQUEST_ID", "Value.$": "$.request_id", "Type": "PLAINTEXT" },
+          { "Name": "TEMPLATE_COMMIT_SHA", "Value.$": "$.template.commit_sha", "Type": "PLAINTEXT" },
+          { "Name": "MODULE_PATH", "Value.$": "$.terraform.module_path", "Type": "PLAINTEXT" },
+          { "Name": "STATE_KEY", "Value.$": "$.terraform.state_key", "Type": "PLAINTEXT" }
+        ]
+      },
+      "ResultSelector": {
+        "build_id.$": "$.Build.Id",
+        "build_status.$": "$.Build.BuildStatus"
+      },
+      "ResultPath": "$.plan_build",
+      "TimeoutSeconds": 3600,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 15,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "PolicyCheckPlan"
+    },
+
+    "PolicyCheckPlan": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${policy_check_plan_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request"
+        }
+      },
+      "ResultSelector": {
+        "passed.$": "$.Payload.policy_check.passed",
+        "violations.$": "$.Payload.policy_check.violations"
+      },
+      "ResultPath": "$.policy_check",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "DidPolicyCheckPass"
+    },
+
+    "DidPolicyCheckPass": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.policy_check.passed",
+          "BooleanEquals": true,
+          "Next": "EvaluateApproval"
+        }
+      ],
+      "Default": "RejectRequest"
+    },
+
+    "EvaluateApproval": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${evaluate_approval_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request",
+          "policy_check.$": "$.policy_check"
+        }
+      },
+      "ResultSelector": {
+        "required.$": "$.Payload.approval.required",
+        "approvers.$": "$.Payload.approval.approvers",
+        "reason.$": "$.Payload.approval.reason"
+      },
+      "ResultPath": "$.approval",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "IsApprovalRequired"
+    },
+
+    "IsApprovalRequired": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.approval.required",
+          "BooleanEquals": true,
+          "Next": "WaitForApproval"
+        }
+      ],
+      "Default": "TerraformApply"
+    },
+
+    "WaitForApproval": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${wait_for_approval_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "approval.$": "$.approval",
+          "task_token.$": "$$.Task.Token"
+        }
+      },
+      "ResultPath": "$.approval_result",
+      "TimeoutSeconds": 86400,
+      "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.error",
+          "Next": "RejectRequest"
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "WasApproved"
+    },
+
+    "WasApproved": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.approval_result.approved",
+          "BooleanEquals": true,
+          "Next": "TerraformApply"
+        }
+      ],
+      "Default": "RejectRequest"
+    },
+
+    "TerraformApply": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::codebuild:startBuild.sync",
+      "Parameters": {
+        "ProjectName": "${terraform_apply_project}",
+        "EnvironmentVariablesOverride": [
+          { "Name": "REQUEST_ID", "Value.$": "$.request_id", "Type": "PLAINTEXT" },
+          { "Name": "TEMPLATE_COMMIT_SHA", "Value.$": "$.template.commit_sha", "Type": "PLAINTEXT" },
+          { "Name": "MODULE_PATH", "Value.$": "$.terraform.module_path", "Type": "PLAINTEXT" },
+          { "Name": "STATE_KEY", "Value.$": "$.terraform.state_key", "Type": "PLAINTEXT" }
+        ]
+      },
+      "ResultSelector": {
+        "build_id.$": "$.Build.Id",
+        "build_status.$": "$.Build.BuildStatus"
+      },
+      "ResultPath": "$.apply_build",
+      "TimeoutSeconds": 7200,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 1,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "ExtractOutputs"
+    },
+
+    "ExtractOutputs": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${extract_outputs_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id"
+        }
+      },
+      "ResultSelector": {
+        "outputs.$": "$.Payload.resource_outputs"
+      },
+      "ResultPath": "$.resource_outputs",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "RegisterResource"
+    },
+
+    "RegisterResource": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${register_resource_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "request.$": "$.loaded.request",
+          "template.$": "$.template",
+          "terraform.$": "$.terraform",
+          "resource_outputs.$": "$.resource_outputs.outputs"
+        }
+      },
+      "ResultSelector": {
+        "resource_id.$": "$.Payload.resource_id"
+      },
+      "ResultPath": "$.resource",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleFailure"
+        }
+      ],
+      "Next": "NotifySuccess"
+    },
+
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${notify_success_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "resource.$": "$.resource",
+          "resource_outputs.$": "$.resource_outputs.outputs"
+        }
+      },
+      "ResultPath": "$.notify",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Succeeded"
+        }
+      ],
+      "Next": "Succeeded"
+    },
+
+    "RejectRequest": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${reject_request_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "input.$": "$"
+        }
+      },
+      "ResultSelector": {
+        "reason.$": "$.Payload.reason"
+      },
+      "ResultPath": "$.rejection",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyRejection"
+        }
+      ],
+      "Next": "NotifyRejection"
+    },
+
+    "NotifyRejection": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${notify_failure_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "mode": "rejected",
+          "input.$": "$"
+        }
+      },
+      "ResultPath": "$.notify",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Rejected"
+        }
+      ],
+      "Next": "Rejected"
+    },
+
+    "HandleFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${handle_failure_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "input.$": "$"
+        }
+      },
+      "ResultSelector": {
+        "classification.$": "$.Payload.classification"
+      },
+      "ResultPath": "$.failure",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "NotifyFailure"
+    },
+
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${notify_failure_lambda_arn}",
+        "Payload": {
+          "request_id.$": "$.request_id",
+          "mode": "failed",
+          "input.$": "$"
+        }
+      },
+      "ResultPath": "$.notify",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "Next": "Failed"
+    },
+
+    "Succeeded": {
+      "Type": "Succeed"
+    },
+
+    "Rejected": {
+      "Type": "Succeed",
+      "Comment": "Business rejection (invalid schema/ownership/policy or approval denied). The execution completes normally; the request row is left in REJECTED state."
+    },
+
+    "Failed": {
+      "Type": "Fail",
+      "Error": "ProvisioningFailed",
+      "Cause": "Provisioning workflow failed. See the request row and audit events for the classified error."
+    }
+  }
+}

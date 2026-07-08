@@ -1,0 +1,14 @@
+aws_region  = "us-east-1"
+name_prefix = "platform-provisioning"
+environment = "dev"
+
+# Repository CodeBuild checks out at an immutable commit_sha.
+templates_repo_url = "https://github.com/LucasRosello/platform-resource-templates.git"
+
+# Demo: WaitForApproval auto-approves. Set false to require a real callback.
+auto_approve_demo = true
+
+# Optional: subscribe an email to the notifications topic.
+# notification_email = "platform@example.com"
+
+log_retention_days = 30
